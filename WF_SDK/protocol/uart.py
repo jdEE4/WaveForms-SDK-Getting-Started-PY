@@ -143,11 +143,31 @@ def write(device_data, data):
         
         parameters: - data of type string, int, or list of characters/integers
     """
-    # cast data
-    if type(data) == int:
-        data = "".join(chr(data))
-    elif type(data) == list:
-        data = "".join(chr(element) for element in data)
+    # accept bytes/bytearray directly
+    if isinstance(data, (bytes, bytearray)):
+        buf = (ctypes.c_ubyte * (len(data) + 1))()
+        for i, b in enumerate(data):
+            buf[i] = int(b) & 0xFF
+        # ensure zero termination
+        buf[len(data)] = 0
+        cbuf = ctypes.cast(buf, ctypes.c_char_p)
+        # send buffer
+        if dwf.FDwfDigitalUartTx(device_data.handle, cbuf, ctypes.c_int(len(data))) == 0:
+            check_error()
+        return
+
+    # cast ints or lists to string via chr for backward compatibility
+    if isinstance(data, int):
+        try:
+            data = chr(data)
+        except Exception:
+            raise warning("Invalid integer for UART write", "write", "protocol/uart")
+    elif isinstance(data, list):
+        # validate list elements are ints 0-255
+        try:
+            data = "".join(chr(int(element) & 0xFF) for element in data)
+        except Exception:
+            raise warning("Invalid list elements for UART write", "write", "protocol/uart")
 
     # encode the string into a string buffer
     data = ctypes.create_string_buffer(data.encode("UTF-8"))
